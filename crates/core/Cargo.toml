@@ -1,0 +1,37 @@
+[package]
+name = "pressa-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = ["raw", "svg", "jxl", "avif-decode", "heif"]
+raw = ["dep:rawler"]
+svg = ["dep:resvg"]
+jxl = ["dep:jxl-oxide"]
+avif-decode = ["dep:avif-decode"]
+# Pure-Rust HEVC decoder (AGPL-3.0; fine for personal use, needs a commercial license to distribute closed-source).
+heif = ["dep:heic"]
+
+[dependencies]
+anyhow.workspace = true
+rayon.workspace = true
+image = { version = "0.25.10", default-features = false, features = ["rayon", "bmp", "dds", "exr", "gif", "hdr", "ico", "jpeg", "png", "pnm", "qoi", "tga", "tiff", "webp"] }
+fast_image_resize = { version = "6.1", features = ["image", "rayon"] }
+moxcms = "0.9"
+mozjpeg = "0.10"
+oxipng = { version = "10.2", default-features = false, features = ["parallel", "zopfli"] }
+imagequant = "4.4"
+webp = "0.3"
+ravif = "0.13"
+rgb = { version = "0.8", features = ["bytemuck"] }
+bytemuck = "1"
+gif = "0.14"
+tiff = "0.11"
+walkdir = "2.5"
+imgref = "1.12"
+rawler = { version = "0.8", optional = true }
+resvg = { version = "0.49", optional = true }
+jxl-oxide = { version = "0.12", features = ["image"], optional = true }
+avif-decode = { version = "3", default-features = false, optional = true }
+heic = { version = "0.1.6", features = ["parallel"], optional = true }
