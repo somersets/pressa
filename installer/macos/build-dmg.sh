@@ -26,9 +26,31 @@ else
     BIN="$ROOT/target/release"
 fi
 
+# Static FFmpeg for video compression (https://ffmpeg.martin-riedl.de, GPL build).
+fetch_ffmpeg() { # $1 = arm64 | amd64
+    local dir="$ROOT/target/ffmpeg-macos/$1"
+    if [[ ! -x "$dir/ffmpeg" ]]; then
+        mkdir -p "$dir"
+        curl -sSfL -o "$dir/ffmpeg.zip" "https://ffmpeg.martin-riedl.de/redirect/latest/macos/$1/release/ffmpeg.zip"
+        unzip -oq "$dir/ffmpeg.zip" -d "$dir"
+        rm "$dir/ffmpeg.zip"
+        chmod +x "$dir/ffmpeg"
+    fi
+}
+FFMPEG="$ROOT/target/ffmpeg-macos/ffmpeg"
+if [[ "${UNIVERSAL:-0}" == "1" ]]; then
+    fetch_ffmpeg arm64
+    fetch_ffmpeg amd64
+    lipo -create -output "$FFMPEG" "$ROOT/target/ffmpeg-macos/arm64/ffmpeg" "$ROOT/target/ffmpeg-macos/amd64/ffmpeg"
+else
+    ARCH="$([[ "$(uname -m)" == "arm64" ]] && echo arm64 || echo amd64)"
+    fetch_ffmpeg "$ARCH"
+    cp "$ROOT/target/ffmpeg-macos/$ARCH/ffmpeg" "$FFMPEG"
+fi
+
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN/Pressa" "$BIN/pressa-cli" "$APP/Contents/MacOS/"
+cp "$BIN/Pressa" "$BIN/pressa-cli" "$FFMPEG" "$APP/Contents/MacOS/"
 
 # Icon: build an .iconset from the 1024 px master.
 ICONSET="$(mktemp -d)/Pressa.iconset"

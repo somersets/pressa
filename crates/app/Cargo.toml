@@ -15,6 +15,7 @@ eframe = { version = "0.37", default-features = false, features = ["glow", "defa
 egui_extras = { version = "0.37", default-features = false }
 rfd = "0.17"
 serde = { version = "1", features = ["derive"] }
+sys-locale = "0.3"
 image = { version = "0.25", default-features = false, features = ["png"] }
 
 [target.'cfg(windows)'.build-dependencies]

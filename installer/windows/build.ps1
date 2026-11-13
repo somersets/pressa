@@ -7,6 +7,7 @@ Push-Location $root
 try {
     cargo build --release
     if ($LASTEXITCODE -ne 0) { throw 'cargo build failed' }
+    & "$PSScriptRoot\fetch-ffmpeg.ps1"
 
     $version = (Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"(.+)"').Matches[0].Groups[1].Value
 

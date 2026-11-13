@@ -41,8 +41,8 @@ en.OpenWith=Open with Pressa
 ru.OpenWith=Открыть в Pressa
 en.Integration=Windows integration:
 ru.Integration=Интеграция с Windows:
-en.ContextMenu=Add "Open with Pressa" to the right-click menu of images and folders
-ru.ContextMenu=Добавить «Открыть в Pressa» в контекстное меню изображений и папок
+en.ContextMenu=Add "Open with Pressa" to the right-click menu of images, videos and folders
+ru.ContextMenu=Добавить «Открыть в Pressa» в контекстное меню изображений, видео и папок
 en.SendTo=Add Pressa to "Send to" (works with many selected files)
 ru.SendTo=Добавить Pressa в меню «Отправить» (для нескольких файлов)
 en.AddToPath=Add the pressa-cli command to PATH
@@ -58,6 +58,9 @@ Name: "addtopath"; Description: "{cm:AddToPath}"; GroupDescription: "{cm:Integra
 Source: "{#Bin}\Pressa.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Bin}\pressa-cli.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Root}\README.md"; DestDir: "{app}"; Flags: ignoreversion
+; Video compression (fetched by fetch-ffmpeg.ps1).
+Source: "{#Root}\target\ffmpeg\ffmpeg.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#Root}\target\ffmpeg\FFMPEG-LICENSE.txt"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Icons]
 Name: "{autoprograms}\Pressa"; Filename: "{app}\Pressa.exe"
@@ -69,6 +72,9 @@ Name: "{usersendto}\Pressa"; Filename: "{app}\Pressa.exe"; Tasks: sendto
 Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\image\shell\Pressa"; ValueType: string; ValueName: ""; ValueData: "{cm:OpenWith}"; Tasks: contextmenu; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\image\shell\Pressa"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\Pressa.exe"""; Tasks: contextmenu
 Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\image\shell\Pressa\command"; ValueType: string; ValueName: ""; ValueData: """{app}\Pressa.exe"" ""%1"""; Tasks: contextmenu
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\video\shell\Pressa"; ValueType: string; ValueName: ""; ValueData: "{cm:OpenWith}"; Tasks: contextmenu; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\video\shell\Pressa"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\Pressa.exe"""; Tasks: contextmenu
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\video\shell\Pressa\command"; ValueType: string; ValueName: ""; ValueData: """{app}\Pressa.exe"" ""%1"""; Tasks: contextmenu
 Root: HKCU; Subkey: "Software\Classes\Directory\shell\Pressa"; ValueType: string; ValueName: ""; ValueData: "{cm:OpenWith}"; Tasks: contextmenu; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\Directory\shell\Pressa"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\Pressa.exe"""; Tasks: contextmenu
 Root: HKCU; Subkey: "Software\Classes\Directory\shell\Pressa\command"; ValueType: string; ValueName: ""; ValueData: """{app}\Pressa.exe"" ""%1"""; Tasks: contextmenu

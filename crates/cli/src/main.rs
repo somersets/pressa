@@ -6,17 +6,20 @@ use std::time::Instant;
 
 use anyhow::{Result, anyhow, bail};
 use clap::{Parser, ValueEnum};
-use pressa_core::{ConvertOptions, Effort, OutputFormat, Resize, collect_inputs, convert_batch};
+use pressa_core::{
+    ConvertOptions, Effort, OutputFormat, Resize, VideoCodec, VideoOptions, collect_inputs, convert_batch,
+    encoder_label, ffmpeg_path, pick_encoder,
+};
 
-/// Convert and compress images.
+/// Convert and compress images, and compress videos.
 #[derive(Parser)]
 #[command(version, about)]
 struct Args {
-    /// Files or folders to convert.
+    /// Files or folders to convert. Folders are mirrored with their subfolders.
     #[arg(required = true)]
     inputs: Vec<PathBuf>,
 
-    /// Output format (jpg, png, webp, avif, gif, bmp, tiff, ico, tga, qoi). Default: keep.
+    /// Image output format (jpg, png, webp, avif, gif, bmp, tiff, ico, tga, qoi). Default: keep.
     #[arg(short, long, value_parser = parse_format)]
     format: Option<OutputFormat>,
 
@@ -48,7 +51,19 @@ struct Args {
     #[arg(short, long, value_parser = parse_size)]
     target_size: Option<u64>,
 
-    /// Output folder. Default: next to each input.
+    /// Video codec: h264, h265 or av1.
+    #[arg(long, default_value = "h265", value_parser = parse_codec)]
+    video_codec: VideoCodec,
+
+    /// Video quality 1–100.
+    #[arg(long, default_value_t = 70, value_parser = clap::value_parser!(u8).range(1..=100))]
+    video_quality: u8,
+
+    /// Encode videos on the CPU even if a GPU encoder is available.
+    #[arg(long)]
+    no_gpu: bool,
+
+    /// Output folder. Default: next to each input file; added folders go to a `<name>-pressa` copy.
     #[arg(short, long)]
     output: Option<PathBuf>,
 
@@ -74,6 +89,10 @@ enum EffortArg {
 
 fn parse_format(s: &str) -> Result<OutputFormat> {
     OutputFormat::from_name(s).ok_or_else(|| anyhow!("unknown output format '{s}'"))
+}
+
+fn parse_codec(s: &str) -> Result<VideoCodec> {
+    VideoCodec::from_name(s).ok_or_else(|| anyhow!("unknown video codec '{s}' (use h264, h265 or av1)"))
 }
 
 fn parse_size(s: &str) -> Result<u64> {
@@ -133,16 +152,34 @@ fn run() -> Result<bool> {
         target_size: args.target_size,
         output_dir: args.output,
         overwrite: args.overwrite,
+        video: VideoOptions {
+            codec: args.video_codec,
+            quality: args.video_quality,
+            hardware: !args.no_gpu,
+            ..Default::default()
+        },
     };
 
     let files = collect_inputs(&args.inputs, args.recursive);
     if files.is_empty() {
-        bail!("no supported images found");
+        bail!("no supported images or videos found");
+    }
+    if files.iter().any(|f| f.kind() == pressa_core::MediaKind::Video) {
+        match pick_encoder(&opts.video) {
+            Some(enc) => eprintln!(
+                "Videos: {} via {} ({enc}), FFmpeg at {}",
+                opts.video.codec.name(),
+                encoder_label(enc),
+                ffmpeg_path().map(|p| p.display().to_string()).unwrap_or_default()
+            ),
+            None => eprintln!("Videos will fail: FFmpeg not found (bundle it next to pressa-cli or add it to PATH)"),
+        }
     }
 
     let start = Instant::now();
     let totals = Mutex::new((0u64, 0u64, 0usize, 0usize)); // in, out, ok, failed
-    convert_batch(&files, &opts, &AtomicBool::new(false), |i, result| {
+    let on_progress = |_: usize, _: f32| {};
+    convert_batch(&files, &opts, &AtomicBool::new(false), on_progress, |i, result| {
         let mut t = totals.lock().unwrap();
         match result {
             Ok(r) => {
@@ -160,9 +197,10 @@ fn run() -> Result<bool> {
                     notes.push("target size not reached".into());
                 }
                 println!(
-                    "{} -> {}  {} -> {} ({:+.1}%)  {}x{}  {:.2}s{}",
+                    "{} -> {}  [{}]  {} -> {} ({:+.1}%)  {}x{}  {:.2}s{}",
                     r.input.display(),
                     r.output.display(),
+                    r.output_format,
                     human(r.input_size),
                     human(r.output_size),
                     r.change_percent(),
@@ -174,7 +212,7 @@ fn run() -> Result<bool> {
             }
             Err(e) => {
                 t.3 += 1;
-                eprintln!("FAILED {}: {e:#}", files[i].display());
+                eprintln!("FAILED {}: {e:#}", files[i].path.display());
             }
         }
     });

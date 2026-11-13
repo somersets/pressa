@@ -1,9 +1,23 @@
 # Pressa
 
-Fast desktop image converter and compressor for Windows and macOS, written in Rust.
+Fast desktop image converter and photo/video compressor for Windows and macOS, written in Rust.
 
 - **GUI** (`Pressa`): drag & drop files or folders, pick a format and quality, convert in parallel.
+  English and Russian interface.
 - **CLI** (`pressa-cli`): the same engine for scripts and batch jobs.
+- **Folders keep their structure**: adding `Trip/` produces `Trip-pressa/` next to it (or `<output>/Trip/`)
+  with the same subfolders, photos and videos.
+
+## Video
+
+Videos (MP4, MOV, MKV, WebM, AVI, WMV, MTS/M2TS, 3GP, MPEG…) are compressed with a bundled FFmpeg
+into MP4 (MKV stays MKV), as H.265 (default), H.264 or AV1. GPU encoders are used when available
+(NVIDIA NVENC, Intel Quick Sync, AMD AMF, Apple VideoToolbox), falling back to x264/x265/SVT-AV1 on the CPU.
+Compatible audio is copied, other audio becomes AAC. Resize and target file size apply to videos too.
+Videos are encoded one at a time while images use all cores.
+
+FFmpeg is looked up in this order: `PRESSA_FFMPEG`, next to the executable, `target/ffmpeg/` (dev builds;
+run `installer/windows/fetch-ffmpeg.ps1`), then `PATH`.
 
 ## Formats
 
@@ -97,6 +111,10 @@ Pressa's own code is MIT. The HEIC decoder (`heic` crate) is AGPL-3.0, so binari
 as this repository does, satisfies that. For a closed-source build, disable it
 (`--no-default-features --features raw,svg,jxl,avif-decode`) or get Imazen's commercial license.
 HEVC may also be covered by patents.
+
+The installers bundle a static GPL build of FFmpeg as a separate program (Windows:
+[FFmpeg-Builds](https://github.com/FFmpeg-Builds/FFmpeg-Builds), macOS: [martin-riedl.de](https://ffmpeg.martin-riedl.de));
+its source is available from [ffmpeg.org](https://ffmpeg.org/download.html) and those projects.
 
 ## Continuous builds
 
