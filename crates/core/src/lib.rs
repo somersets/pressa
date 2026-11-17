@@ -4,6 +4,7 @@ mod decode;
 mod encode;
 mod error;
 mod format;
+mod jpeg_lossless;
 mod pipeline;
 mod transform;
 mod video;

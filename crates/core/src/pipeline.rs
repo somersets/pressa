@@ -10,7 +10,8 @@ use rayon::prelude::*;
 use crate::decode;
 use crate::encode::{self, Effort, EncodeSettings};
 use crate::error::{ErrorKind, PressaError, ResultExt};
-use crate::format::{self, OutputFormat};
+use crate::format::{self, InputFormat, OutputFormat};
+use crate::jpeg_lossless;
 use crate::transform::{self, Resize};
 use crate::video::{self, VideoOptions};
 
@@ -101,6 +102,8 @@ pub struct Report {
     pub kept_original: bool,
     /// The output is still larger than the target size.
     pub target_missed: bool,
+    /// Lossless was requested but isn't possible for this file and format, so the quality setting was used.
+    pub lossy_fallback: bool,
     pub elapsed: Duration,
 }
 
@@ -146,8 +149,12 @@ fn convert_image(input: &InputFile, opts: &ConvertOptions) -> Result<Report> {
     let path = &input.path;
     let bytes = fs::read(path).kind(ErrorKind::ReadFailed)?;
     let input_size = bytes.len() as u64;
-    if format::detect(path, &bytes).is_none() {
+    let Some(input_format) = format::detect(path, &bytes) else {
         return Err(PressaError::new(ErrorKind::UnsupportedFormat, "unrecognized image format").into());
+    };
+    let jpeg_to_jpeg = input_format == InputFormat::Jpeg && opts.format.is_none_or(|f| f == OutputFormat::Jpeg);
+    if opts.lossless && jpeg_to_jpeg && opts.resize.is_none() {
+        return convert_jpeg_lossless(input, opts, bytes, start);
     }
     let decoded = decode::decode(path, &bytes).kind(ErrorKind::DecodeFailed)?;
     let output_format = opts.format.unwrap_or_else(|| decoded.format.default_output());
@@ -203,6 +210,45 @@ fn convert_image(input: &InputFile, opts: &ConvertOptions) -> Result<Report> {
         quality_used,
         kept_original,
         target_missed,
+        lossy_fallback: opts.lossless && !output_format.supports_lossless(),
+        elapsed: start.elapsed(),
+    })
+}
+
+/// JPEG to JPEG with "lossless" on: re-pack the existing compressed data instead of re-encoding.
+fn convert_jpeg_lossless(input: &InputFile, opts: &ConvertOptions, bytes: Vec<u8>, start: Instant) -> Result<Report> {
+    use image::ImageDecoder;
+
+    // Only the header is parsed here.
+    let (orientation, (w, h)) = {
+        let mut decoder = image::ImageReader::with_format(std::io::Cursor::new(&bytes), image::ImageFormat::Jpeg)
+            .into_decoder()
+            .kind(ErrorKind::DecodeFailed)?;
+        (decoder.orientation().map(|o| o.to_exif()).unwrap_or(1), decoder.dimensions())
+    };
+    let (width, height) = if (5..=8).contains(&orientation) { (h, w) } else { (w, h) };
+
+    let input_size = bytes.len() as u64;
+    let optimized = jpeg_lossless::optimize(&bytes, orientation).kind(ErrorKind::EncodeFailed)?;
+    let kept_original = optimized.len() >= bytes.len();
+    let data = if kept_original { bytes } else { optimized };
+    let output = write_output(input, opts, OutputFormat::Jpeg.extension(), |tmp| {
+        fs::write(tmp, &data).kind(ErrorKind::WriteFailed)
+    })?;
+    Ok(Report {
+        input: input.path.clone(),
+        output,
+        kind: MediaKind::Image,
+        input_format: InputFormat::Jpeg.name().to_string(),
+        output_format: OutputFormat::Jpeg.name().to_string(),
+        input_size,
+        output_size: data.len() as u64,
+        width,
+        height,
+        quality_used: None,
+        kept_original,
+        target_missed: opts.target_size.is_some_and(|t| data.len() as u64 > t),
+        lossy_fallback: false,
         elapsed: start.elapsed(),
     })
 }
@@ -269,6 +315,7 @@ fn convert_video(
         quality_used: None,
         kept_original,
         target_missed: opts.target_size.is_some_and(|t| output_size > t),
+        lossy_fallback: false,
         elapsed: start.elapsed(),
     })
 }

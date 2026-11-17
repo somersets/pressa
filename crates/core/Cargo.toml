@@ -20,6 +20,8 @@ image = { version = "0.25.10", default-features = false, features = ["rayon", "b
 fast_image_resize = { version = "6.1", features = ["image", "rayon"] }
 moxcms = "0.9"
 mozjpeg = "0.10"
+mozjpeg-sys = { version = "2.2", default-features = false, features = ["unwinding"] }
+libc = "0.2"
 oxipng = { version = "10.2", default-features = false, features = ["parallel", "zopfli"] }
 imagequant = "4.4"
 webp = "0.3"
@@ -35,3 +37,6 @@ resvg = { version = "0.49", optional = true }
 jxl-oxide = { version = "0.12", features = ["image"], optional = true }
 avif-decode = { version = "3", default-features = false, optional = true }
 heic = { version = "0.1.6", features = ["parallel"], optional = true }
+
+[dev-dependencies]
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg"] }

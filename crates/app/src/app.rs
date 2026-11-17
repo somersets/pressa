@@ -87,7 +87,13 @@ impl App {
             gpu_encoders,
         };
         // Files passed on the command line, e.g. dropped onto the executable or sent via "Send to".
-        app.add_paths(std::env::args_os().skip(1).map(PathBuf::from).collect());
+        // Resolve them before leaving the working directory Explorer started us in.
+        let args: Vec<PathBuf> = std::env::args_os()
+            .skip(1)
+            .map(|a| std::path::absolute(PathBuf::from(&a)).unwrap_or_else(|_| PathBuf::from(a)))
+            .collect();
+        release_working_dir();
+        app.add_paths(args);
         app
     }
 
@@ -182,15 +188,15 @@ impl App {
                     ];
                     exts.extend_from_slice(RAW_EXTENSIONS);
                     exts.extend_from_slice(VIDEO_EXTENSIONS);
-                    if let Some(files) = rfd::FileDialog::new()
-                        .add_filter(l.t("Photos and videos", "Фото и видео"), &exts)
-                        .pick_files()
-                    {
+                    let files =
+                        rfd::FileDialog::new().add_filter(l.t("Photos and videos", "Фото и видео"), &exts).pick_files();
+                    release_working_dir();
+                    if let Some(files) = files {
                         self.add_paths(files);
                     }
                 }
                 if ui.button(l.t("Add folder…", "Добавить папку…")).clicked()
-                    && let Some(dir) = rfd::FileDialog::new().pick_folder()
+                    && let Some(dir) = pick_folder()
                 {
                     self.add_paths(vec![dir]);
                 }
@@ -269,16 +275,21 @@ impl App {
             }
             ui.end_row();
 
-            let can_lossless = selected.is_none_or(|f| f.supports_lossless());
-            let lossless = s.lossless && can_lossless;
-            let lossy = selected.is_none_or(|f| f.is_lossy()) && !lossless;
+            // JPEG can't store new pixels losslessly, but JPEG originals can be re-packed without loss.
+            let can_lossless = selected.is_none_or(|f| f.supports_lossless() || f == OutputFormat::Jpeg);
+            let mut lossless = s.lossless && can_lossless;
+            // The slider still applies to files that can't stay lossless (e.g. HEIC saved as JPEG).
+            let lossy = selected.is_none_or(|f| f.is_lossy() && !(lossless && f.supports_lossless()));
 
             ui.label(l.t("Quality", "Качество"));
             ui.add_enabled(lossy, egui::Slider::new(&mut s.quality, 1..=100));
             ui.end_row();
 
             ui.label("");
-            ui.add_enabled(can_lossless, egui::Checkbox::new(&mut s.lossless, l.t("Lossless", "Без потерь")));
+            // Shows the effective state, so a disabled box never looks checked.
+            if ui.add_enabled(can_lossless, egui::Checkbox::new(&mut lossless, l.t("Lossless", "Без потерь"))).changed() {
+                s.lossless = lossless;
+            }
             ui.end_row();
 
             ui.label(l.t("Effort", "Режим"));
@@ -294,8 +305,21 @@ impl App {
             s.effort = Effort::ALL.iter().position(|e| *e == effort).unwrap_or(1) as u8;
             ui.end_row();
         });
-        if let Some(hint) = format_hint(l, format, s.lossless) {
+        let lossless = s.lossless && format.is_none_or(|f| f.supports_lossless() || f == OutputFormat::Jpeg);
+        if let Some(hint) = format_hint(l, format, lossless) {
             ui.label(RichText::new(hint).small().weak());
+        }
+        if lossless && format.is_none_or(|f| f == OutputFormat::Jpeg) {
+            ui.label(
+                RichText::new(l.t(
+                    "JPEG originals are re-packed without changing a single pixel. Files that can't stay lossless \
+                     (e.g. HEIC or RAW saved as JPEG) use the quality slider.",
+                    "Оригиналы JPEG пересобираются без изменения пикселей. Файлы, которые нельзя сохранить без потерь \
+                     (например, HEIC или RAW в JPEG), сжимаются с качеством ползунка.",
+                ))
+                .small()
+                .weak(),
+            );
         }
 
         ui.add_space(10.0);
@@ -423,7 +447,7 @@ impl App {
         ui.horizontal(|ui| {
             if (ui.radio_value(&mut next_to, false, l.t("Folder:", "В папку:")).clicked()
                 || ui.button(l.t("Choose…", "Выбрать…")).clicked())
-                && let Some(dir) = rfd::FileDialog::new().pick_folder()
+                && let Some(dir) = pick_folder()
             {
                 s.output_dir = Some(dir);
             }
@@ -602,6 +626,13 @@ impl App {
                                     tip += "\n";
                                     tip += l.t("Couldn't reach the target size.", "Не удалось уложиться в заданный размер.");
                                 }
+                                if rep.lossy_fallback {
+                                    tip += "\n";
+                                    tip += l.t(
+                                        "Lossless isn't possible for this file in this format, so the quality slider was used.",
+                                        "Для этого файла и формата сжатие без потерь невозможно, поэтому использован ползунок качества.",
+                                    );
+                                }
                                 resp.on_hover_text(tip);
                             });
                             row.col(|ui| {
@@ -688,6 +719,7 @@ impl eframe::App for App {
 
 fn format_hint(l: Lang, format: Option<OutputFormat>, lossless: bool) -> Option<&'static str> {
     Some(match format? {
+        OutputFormat::Jpeg if lossless => return None, // explained by the lossless hint
         OutputFormat::Jpeg => l.t(
             "mozjpeg: smaller JPEGs at the same quality.",
             "mozjpeg: JPEG меньше при том же качестве.",
@@ -737,6 +769,23 @@ fn human(l: Lang, bytes: u64) -> String {
         n if n >= 1 << 10 => format!("{:.1} {kb}", n as f64 / 1024.0),
         n => format!("{n} {b}"),
     }
+}
+
+/// Windows refuses to delete a folder that is a running program's working directory.
+/// File dialogs and Explorer's "Open with" / "Send to" can leave it pointing into the
+/// user's folders, so keep it on Pressa's own folder.
+fn release_working_dir() {
+    let dir = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(Path::to_path_buf))
+        .unwrap_or_else(std::env::temp_dir);
+    let _ = std::env::set_current_dir(dir);
+}
+
+fn pick_folder() -> Option<PathBuf> {
+    let dir = rfd::FileDialog::new().pick_folder();
+    release_working_dir();
+    dir
 }
 
 fn reveal(path: &Path) {

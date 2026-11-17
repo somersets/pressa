@@ -3456,7 +3456,7 @@ dependencies = [
 
 [[package]]
 name = "pressa"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "eframe",
@@ -3471,7 +3471,7 @@ dependencies = [
 
 [[package]]
 name = "pressa-cli"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -3481,7 +3481,7 @@ dependencies = [
 
 [[package]]
 name = "pressa-core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "avif-decode",
@@ -3493,8 +3493,10 @@ dependencies = [
  "imagequant",
  "imgref",
  "jxl-oxide",
+ "libc",
  "moxcms 0.9.2",
  "mozjpeg",
+ "mozjpeg-sys",
  "oxipng",
  "ravif",
  "rawler",
